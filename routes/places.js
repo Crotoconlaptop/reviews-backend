@@ -66,9 +66,9 @@ router.post('/add', (req, res) => {
 
     const newPlace = {
         id: crypto.randomUUID(),
-        name: name.trim(),
-        city: city.trim(),
-        address: address.trim(),
+        name: name.trim().toLowerCase(),
+        city: city.trim().toLowerCase(),
+        address: address.trim().toLowerCase(),
         ratings: [], // Contendrá votaciones con categorías omitidas representadas como `null`
         averageRating: 0,
     };
