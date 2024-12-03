@@ -7,15 +7,15 @@ const crypto = require('crypto');
 const placesDataPath = path.join(__dirname, '../data/places.json');
 let placesData = fs.existsSync(placesDataPath) ? require(placesDataPath) : [];
 
-// Función para guardar datos en el archivo JSON
+// Function to save data to the JSON file
 const savePlacesData = () => {
     fs.writeFileSync(placesDataPath, JSON.stringify(placesData, null, 2));
 };
 
-// Función para cifrar IPs
+// Function to hash IPs
 const hashIP = (ip) => crypto.createHash('sha256').update(ip).digest('hex');
 
-// Lista de nombres de categorías
+// List of category names
 const categoryNames = [
     'HR',
     'FRONT DESK',
@@ -32,21 +32,20 @@ const categoryNames = [
     'ACCOMMODATION'
 ];
 
-// Pesos para las categorías
+// Category weights
 const weights = {
     10: 2, // DISCRIMINATION
     11: 2, // ANIMAL ABUSE
     12: 2, // ACCOMMODATION
 };
 
-// **Rutas**
-
-// 1. Agregar un nuevo lugar
+// **Routes**
+// 1. Add a new place
 router.post('/add', (req, res) => {
     const { name, city, address } = req.body;
 
     if (!name || !city || !address) {
-        return res.status(400).json({ error: 'Nombre, ciudad y dirección son obligatorios' });
+        return res.status(400).json({ error: 'Name, city, and address are required' });
     }
 
     const normalizedName = name.trim().toLowerCase();
@@ -61,51 +60,53 @@ router.post('/add', (req, res) => {
     );
 
     if (existingPlace) {
-        return res.status(200).json({ message: 'El lugar ya existe', place: existingPlace });
+        return res.status(200).json({ message: 'The place already exists', place: existingPlace });
     }
 
     const newPlace = {
         id: crypto.randomUUID(),
-        name: name.trim().toLowerCase(),
-        city: city.trim().toLowerCase(),
-        address: address.trim().toLowerCase(),
-        ratings: [], // Contendrá votaciones con categorías omitidas representadas como `null`
+        name: name.trim(),
+        city: city.trim(),
+        address: address.trim(),
+        ratings: [], // Ratings with omitted categories represented as `null`
         averageRating: 0,
     };
 
     placesData.push(newPlace);
     savePlacesData();
-    res.status(201).json({ message: 'Lugar agregado exitosamente', place: newPlace });
+    res.status(201).json({ message: 'Place added successfully', place: newPlace });
 });
 
-// 2. Enviar votación
+// 2. Submit a rating
 router.post('/rate', (req, res) => {
     const { id, ratings } = req.body;
     const userIP = hashIP(req.ip);
 
     const place = placesData.find((place) => place.id === id);
     if (!place) {
-        return res.status(404).json({ error: 'Lugar no encontrado' });
+        return res.status(404).json({ error: 'Place not found' });
     }
 
     if (!Array.isArray(ratings) || ratings.some((r) => r !== null && (isNaN(r) || r < 1 || r > 5))) {
-        return res.status(400).json({ error: 'Las calificaciones deben ser números entre 1 y 5 o null para categorías omitidas.' });
+        return res.status(400).json({ error: 'Ratings must be numbers between 1 and 5 or null for omitted categories.' });
     }
 
     const now = new Date();
     const threeMonthsAgo = new Date(now.setMonth(now.getMonth() - 3));
 
+    // Check if the user has voted in the last 3 months
     const recentVote = place.ratings.some(
         (vote) => vote.userIP === userIP && new Date(vote.date) >= threeMonthsAgo
     );
 
     if (recentVote) {
-        return res.status(403).json({ error: 'Solo puedes votar una vez cada 3 meses para este lugar.' });
+        return res.status(403).json({ error: 'You can only vote once every 3 months for this place.' });
     }
 
+    // Add the rating
     place.ratings.push({ userIP, ratings, date: new Date() });
 
-    // Calcular promedio considerando categorías omitidas
+    // Calculate average rating considering omitted categories
     const totalWeightedScore = place.ratings.flatMap((vote) =>
         vote.ratings.map((value, index) => (value !== null ? value * (weights[index] || 1) : 0))
     ).reduce((sum, weightedValue) => sum + weightedValue, 0);
@@ -114,13 +115,14 @@ router.post('/rate', (req, res) => {
         vote.ratings.map((value, index) => (value !== null ? (weights[index] || 1) : 0))
     ).reduce((sum, weight) => sum + weight, 0);
 
-    place.averageRating = totalWeights > 0 ? (totalWeightedScore / totalWeights).toFixed(2) : 'Sin calificaciones';
+    place.averageRating = totalWeights > 0 ? (totalWeightedScore / totalWeights).toFixed(2) : 'No ratings';
 
     savePlacesData();
-    res.json({ message: 'Votación guardada exitosamente', place });
+    res.json({ message: 'Rating saved successfully', place });
 });
 
-// 3. Obtener listas de ranking
+
+// 3. Get rankings
 router.get('/ranking', (req, res) => {
     const sortedPlaces = [...placesData].sort((a, b) => b.averageRating - a.averageRating);
     const topPlaces = sortedPlaces.slice(0, 5);
@@ -128,13 +130,13 @@ router.get('/ranking', (req, res) => {
     res.json({ topPlaces, bottomPlaces });
 });
 
-// 4. Detalles de un lugar
+// 4. Get place details
 router.get('/:id', (req, res) => {
     const { id } = req.params;
     const place = placesData.find((place) => place.id === id);
 
     if (!place) {
-        return res.status(404).json({ error: 'Lugar no encontrado' });
+        return res.status(404).json({ error: 'Place not found' });
     }
 
     const totalVotes = place.ratings.length;
@@ -144,7 +146,7 @@ router.get('/:id', (req, res) => {
               const categoryRatings = place.ratings.map((vote) => vote.ratings[i]).filter((r) => r !== null);
               const average = categoryRatings.length > 0
                   ? (categoryRatings.reduce((sum, value) => sum + value, 0) / categoryRatings.length).toFixed(1)
-                  : 'Sin calificaciones';
+                  : 'No ratings';
               return { category: name, average };
           })
         : [];

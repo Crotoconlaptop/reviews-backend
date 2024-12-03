@@ -6,7 +6,7 @@ const morgan = require('morgan');
 const placesRoutes = require('./routes/places');
 
 const app = express();
-
+app.set('trust proxy', true);
 // Middlewares
 app.use(morgan('dev'));
 app.use(bodyParser.json());
